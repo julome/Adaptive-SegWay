@@ -1,4 +1,4 @@
-Adaptive-Control-AegWay
+Adaptive-Control-SegWay
 ========================
 
 Adaptive predictive control with Arduino
