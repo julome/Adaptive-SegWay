@@ -217,7 +217,7 @@ void angle_result()
 	********************************************************/					
 	a_gyro[0] = (63 * a_gyro[0] + 1 * (- ax));		// Update a_gyro adding accelerometer								
 	a_gyro[0] = a_gyro[0] >> 6;						// Send update in correct units div by 2^6 for next angle meters	   															
-	a_result[0] = (a_gyro[0] >> 7) / 512.0;				// Result = angle_result/2^16 => angles -180º to 180 	
+	a_result[0] = (a_gyro[0] >> 6) / 1024.0;				// Result = angle_result/2^16 => angles -180º to 180 	
 }
 	
 // Adaptive Control
