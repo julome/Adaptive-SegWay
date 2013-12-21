@@ -38,7 +38,7 @@
 #define T_SAMPLE		1			// Time sample Read IMU (Accel and Gyro) T = T_SAMPLE * 1ms
 #define T_RESULT		6			// Time sample result Accel + Gyro T = T_RESULT * T_SAMPLE
 #define T_CONTROL		2			// Time actuation. Must be synchronized with PWM pulse. T = T_CONTROL *  T_RESULT * T_SAMPLE (this must be less than T_PWM - time algorithm adaptive execution)
-#define NL				0.08		// Dead band for Adaptive Mechanism. Dead band = 2^7 = 1º
+#define NL				0.02		// Dead band for Adaptive Mechanism. Dead band = 2^7 = 1º
 #define GainA 			1.0			// Gain for Adaptive Mechanism A
 #define GainB 			0.2			// Gain for Adaptive Mechanism B
 #define RC				0.5			// Limit rate change incremental desired out
@@ -217,7 +217,7 @@ void angle_result()
 	********************************************************/					
 	a_gyro[0] = (63 * a_gyro[0] + 1 * (- ax));		// Update a_gyro adding accelerometer								
 	a_gyro[0] = a_gyro[0] >> 6;						// Send update in correct units div by 2^6 for next angle meters	   															
-	a_result[0] = a_gyro[0] / 65536.0;				// Result = angle_result/2^16 => angles -180º to 180 	
+	a_result[0] = (a_gyro[0] >> 7) / 512.0;				// Result = angle_result/2^16 => angles -180º to 180 	
 }
 	
 // Adaptive Control
@@ -381,7 +381,6 @@ int main(void)
 			//put_float(ur[0]);
 			//put_string(" ");
 			//put_float(out_balancer);
-			//put_string(" ");
 			//put_float(a_result[0]);				
 			//put_string("\n");												
 		}									
