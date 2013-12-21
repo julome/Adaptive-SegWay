@@ -1,9 +1,9 @@
-Adaptive-Control-Arduino
+Adaptive-Control-AegWay
 ========================
 
 Adaptive predictive control with Arduino
 
-El objetico es la implementación de control adaptativo predictivo en un microcontrolador de bajo coste como Arduino.
+El objetivo es la implementación de control adaptativo predictivo en un microcontrolador de bajo coste como Arduino.
 
 Este es un ejemplo de control adaptativo predictivo implementado en un robot equilibrista utilizando un MPU6050 y un Atmega168 (Arduino Pro Mini).
 
