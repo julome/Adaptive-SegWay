@@ -19,9 +19,9 @@
 #define IMU				0xD0		// Direction Slave IMU
 #define DLPF_CFG		0x00		// Low Pass Filter IMU Off
 #define GYRO_FS			0x08		// Scale Gyro +/- 500 °/s
-//#define AFS_SEL		0x18		// Scale Accelerometer a +/- 16g
+#define AFS_SEL			0x18		// Scale Accelerometer a +/- 16g
 //#define AFS_SEL		0x00		// Scale Accelerometer a +/- 2g
-#define AFS_SEL			0x08		// Scale Accelerometer a +/- 4g
+//#define AFS_SEL		0x08		// Scale Accelerometer a +/- 4g
 #define CLKSEL			0x09		// Sleep disable, Clock PLL Gyro_X, temp disable
 #define SMPLRT_DIV		0x03		// Sample rate divider at 2 KHz only if DLPF is OFF
 
@@ -35,21 +35,22 @@
 #define SMPRT_DIV		0x19		// Registry Sample Rate Divider
 
 // Configuration 
-#define T_SAMPLE		1			// Time sample Read IMU (Accel and Gyro) T = T_SAMPLE * 1ms
+#define T_SAMPLE		2			// Time sample Read IMU (Accel and Gyro) T = T_SAMPLE * 1ms
 #define T_RESULT		6			// Time sample result Accel + Gyro T = T_RESULT * T_SAMPLE
-#define T_CONTROL		2			// Time actuation. Must be synchronized with PWM pulse. T = T_CONTROL *  T_RESULT * T_SAMPLE (this must be less than T_PWM - time algorithm adaptive execution)
-#define NL				0.02		// Dead band for Adaptive Mechanism. Dead band = 2^7 = 1º
-#define GainA 			1.0			// Gain for Adaptive Mechanism A
+#define T_CONTROL		1			// Time actuation. Must be synchronized with PWM pulse. T = T_CONTROL *  T_RESULT * T_SAMPLE (this must be less than T_PWM - time algorithm adaptive execution)
+#define NL				0.0002		// Noise Level for Adaptive Mechanism.
+#define GainA 			0.4			// Gain for Adaptive Mechanism A
 #define GainB 			0.2			// Gain for Adaptive Mechanism B
-#define RC				0.5			// Limit rate change incremental desired out
-#define UP				800.0		// Upper limit out
-#define IL				200.0		// Incremental Limit out
-#define LIL				100.0		// Limit incremental Limit in the balance
-#define BALANCE			0.5			// Value of the balance
-#define GainT			150.0		// Total Gain Out Controller
-#define MaxOut			UP/GainT
-#define IL_Gain         IL/GainT
-#define LIL_Gain        LIL/GainT
+#define PmA				1			// Delay Parameters a
+#define PmB				2			// Delay Parameters b
+#define hz 5				// Prediction Horizon
+#define UP_Roll			800.0		// Upper limit out
+#define UP_Yaw			180.0		// Upper limit out
+#define GainT_Roll		15.0		// Total Gain Roll Out Controller
+#define GainT_Yaw		5.0			// Total Gain Yaw Out Controller
+#define MaxOut_Roll		UP_Roll/GainT_Roll
+#define MaxOut_Yaw		UP_Yaw/GainT_Yaw
+
 
 // Calcs
 #define GRADE (180.0/M_PI) * 65536.0
@@ -59,7 +60,7 @@
 #define LM PINB2					// Out PWM control Left Motor Timer1 OC1B DPIN 10 Arduino Pro Mini (Atmega328p)
 
 // Variables globales
-//volatile unsigned char cont_PWM = 0;
+volatile unsigned char cont_PWM = 0;
 volatile unsigned char t_sample = 0;		// Count ms for sample timer IMU
 volatile unsigned char t_process = 0;		// Enable actuation in a control period
 volatile unsigned char t_control = 0;		// Time actuation
@@ -67,6 +68,7 @@ volatile unsigned char t_result = 0;		// Time sample result Accel + Gyro (tilt a
 long a_gyro[3] = {0, 0, 0};					// Angles x, y, z result from gyroscope
 long accel_correct[3] = {0, 0, 0};			// Accelerometer components corrected
 double a_result[3] = {0, 0, 0};				// Angles results x, y, z filtered
+
 
 // Write byte to IMU through TWI
 void TWI_Write(unsigned char reg, unsigned char data){  // reg= Direction de registro, data= data to write
@@ -166,9 +168,9 @@ long lpf(long pv_sf, long pv_fil_ant, signed char kf){
 }	
 
 //Low Pass Filter (2^4) (kf = 0 - 16 kf_min = 1/16 = 0.0625)
-long lpf_16(long pv_sf, long pv_fil_ant, signed char kf){
+long lpf_32(long pv_sf, long pv_fil_ant, signed char kf){
 	long pv_fil;
-	pv_fil = (kf * pv_sf + (16 - kf) * pv_fil_ant) >> 4;		//pv_fil = kf * pv_sf + (1 - kf) * pv_fil_ant;
+	pv_fil = (kf * pv_sf + (32 - kf) * pv_fil_ant) >> 5;		//pv_fil = kf * pv_sf + (1 - kf) * pv_fil_ant;
 	return pv_fil;
 }
 
@@ -182,7 +184,15 @@ void sample_meters(unsigned char t)
 	
 	// Gyroscope		
 	TWI_Read(GYRO_XOUT, gyro, 6);		// Gyro meters		
-	gyro_correct[0] = gyro[1];				// x Axis
+	//gyro_correct[0] = gyro[1];			// x Axis
+	
+	if (abs(gyro[1]) > 50) gyro_correct[0] = gyro[1];			// Z Axis comprueba la circuiteria sin trampear
+	else gyro_correct[0] = 0;
+	
+	if (abs(gyro[2]) > 100) gyro_correct[2] = gyro[2];			// Z Axis comprueba la circuiteria sin trampear
+	else gyro_correct[2] = 0;
+	
+	//gyro_correct[2] = gyro[2];			// Z Axis
 						
 	/*******************************************************
 	Angle gyro = w * dt
@@ -191,21 +201,24 @@ void sample_meters(unsigned char t)
 	angle_gyro = angle_gyro + gyro * dt	
 	Tmin = 1ms and f_scale_gyro = +-500 => dt = T * (1ms/65.5) * 2^16 = 1 * T
 	********************************************************/	
-	a_gyro[0] = a_gyro[0] + t * ((gyro_correct[0] + gyro_correct_ant[0]) >> 1);				//Angle axis X		
+	a_gyro[0] = a_gyro[0] + t * ((gyro_correct[0] + gyro_correct_ant[0]) >> 1);			//Angle axis X		
+	a_gyro[2] = a_gyro[2] + t * ((gyro_correct[2] + gyro_correct_ant[2]) >> 1);			// Angle axis z
+	if ((a_gyro[2] > 11796480) | (a_gyro[2] < -11796480)) a_gyro[2] = 0;				//Limits range +180 - -180. If angle > 180 or angle < -180 => angle = 0
 		
 	//Save k
 	gyro_correct_ant[0] = gyro_correct[0];
+	gyro_correct_ant[2] = gyro_correct[2];	
 		
 	// Accelerometer
 	TWI_Read(ACCEL_XOUT, accel, 6);			//Accelerometer meters				
-	accel_correct[0] = lpf_16(accel[0], accel_correct[0], 1);		// Low pass filter x axis
-	accel_correct[2] = lpf_16(accel[2], accel_correct[2], 1);		// Low pass filter z axis	
+	accel_correct[0] = lpf_32(accel[0], accel_correct[0], 1);		// Low pass filter x axis
+	accel_correct[2] = lpf_32(accel[2], accel_correct[2], 1);		// Low pass filter z axis	
 }
 
 //Tilt Angles calculator arx adding accelerometer	
 void angle_result()
 {								
-	long ax = 0;				//Angles result of accelerometer					
+	double ax = 0;				//Angles result of accelerometer					
 					
 	//Angles accelerometer = arctg (x1,x2). Results in radianes (grades = rad * 180/pi) * 2^16 for units as gyro		
 	ax = (atan2(accel_correct[0], accel_correct[2])) * GRADE;		//ax = atan2(x, z) * 180/M_PI	
@@ -217,85 +230,89 @@ void angle_result()
 	********************************************************/					
 	a_gyro[0] = (63 * a_gyro[0] + 1 * (- ax));		// Update a_gyro adding accelerometer								
 	a_gyro[0] = a_gyro[0] >> 6;						// Send update in correct units div by 2^6 for next angle meters	   															
-	a_result[0] = (a_gyro[0] >> 6) / 1024.0;				// Result = angle_result/2^16 => angles -180º to 180 	
+	//a_result[0] = lpf((a_gyro[0] >> 6), a_result[0], 3);				// Result = angle_result/2^16 => angles -180º to 180 	
+
+	a_result[0] = (a_gyro[0] >> 10)/64.0;
+	//a_result[2] = lpf((a_gyro[2] >> 6), a_result[2], 5);				// Result = angle_result/2^10 => angles -180º * 2^10 to 180 * 2^10 (YAW)
+	a_result[2] = (a_gyro[2] >> 10)/64.0;
 }
 	
 // Adaptive Control
-void adaptive(double sp, double *t, double *y, double *u, double *yp){
+void adaptive(double sp, double *t, double *y, double *u, double *yp, double max_out){
 
 	double y_k = 0;				// Estimated out
 	double ek = 0;				// Estimation error
 	double q = 0;				// Aux for adaptive process
 	double y_dk = 0;			// Incremental Desired Out	
 	double y_pdk = 0;			// Process Desired out						
+	unsigned int adap;			// Enable/disable  adaptation
+
 			
-	y[0] = yp[0] + 90.0;		// Scaled incremental out process for only positive values.
+	y[0] = yp[0] + 180.0;		// Scaled incremental out process for only positive values.
 								// Mapped From -90 -- 90 to 0 - 180
 									
 	// Predictive model order 2 with 4 parameters b					
-	y_k = t[0] * y[1] + t[1] * y[2] + t[2] * u[2] + t[3] * u[3] + t[4] * u[4];		// Estimated out Delay Process = 1
+	y_k = t[0] * y[PmA] + t[1] * y[PmA+1] + t[2] * u[PmB] + t[3] * u[PmB+1] + t[4] * u[PmB+2];		// Estimated out Delay Process = 1
 	ek = (y[0] - y_k);						// Estimation error
-	if (fabs(ek) < NL) ek = 0;				// Noise Level
-		else if (ek > NL) ek = ek - NL;
-			else if (ek < -NL) ek = ek + NL;
-							
-	//Adaptive mechanism DP = 1
-	q = ek / (1.0 + (GainA * (pow(y[1],2) + pow(y[2],2)) + GainB * (pow(u[2],2) + pow(u[3],2) + pow(u[4],2))));
-	t[0] += (GainA * q * y[1]);
-	t[1] += (GainA * q * y[2]);	
-	t[2] += (GainB * q * u[2]);
-	t[3] += (GainB * q * u[3]);
-	t[4] += (GainB * q * u[4]);	
-				
-	//Desired out calculated. Model ref: a1 = 1, a2 = -0.25, b1 = 0.25	
-	//y_pdk = 0.3125 * yp[0] - 0.125 * yp[1] + 0.8125 * sp[0];		// Prediction horizon = 4 order 2
-	y_pdk = 0.1875 * yp[0] - 0.078125 * yp[1] + 0.890625 * sp;		// Prediction horizon = 5 order 2
-
-	if (y_pdk > RC) y_pdk = RC;										// Limit rate change incremental desired out
-		else if (y_pdk < -RC) y_pdk = - RC;			
 	
-	y_dk = y_pdk + 90.0;											// Scaled for always positive values  
+	//if (fabs(ek) < NL) ek = 0.0;				// Noise Level
+		//else if (ek > NL) ek = ek - NL;
+			//else if (ek < -NL) ek = ek + NL;	
+	
+	if (fabs(ek) > NL) adap = 1;				// Noise Level
+		else adap = 0;
+							
+	//Adaptive mechanism
+	q = adap * ek / (1.0 + (GainA * (pow(y[PmA],2) + pow(y[PmA+1],2)) + GainB * (pow(u[PmB],2) + pow(u[PmB+1],2) + pow(u[PmB+2],2))));
+			
+	t[0] += (GainA * q * y[PmA]);
+	t[1] += (GainA * q * y[PmA+1]);		
+	t[2] += (GainB * q * u[PmB]);
+	t[3] += (GainB * q * u[PmB+1]);
+	t[4] += (GainB * q * u[PmB+2]);
+					
+	//Desired out calculated. Model ref: a1 = 1, a2 = -0.25, b1 = 0.25	
+	//y_pdk = 0.3125 * yp[0] - 0.125 * yp[1] + 0.8125 * sp;		// Prediction horizon = 4 order 2
+	//y_pdk = 0.1875 * yp[0] - 0.078125 * yp[1] + 0.890625 * sp;		// Prediction horizon = 5 order 2
+	//y_pdk = 0.2128 * yp[0] - 0.081024 * yp[1] + 0.868224 * sp;		// Prediction horizon = 5 order 2 lentooo a2=-0.24
+	y_pdk = 0.2387 * yp[0] - 0.083467 * yp[1] + 0.844767 * sp;		// Prediction horizon = 5 order 2 lentooo a2=-0.23
+
+	y_dk = y_pdk + 180.0;											// Scaled for always positive values  
 	
 	// Calculated Regulator Out 		
-	#define hz 5				// Prediction Horizon
 	double e1[hz] = { t[0] };	// Vector e1 for horizon
-    double e2[hz] = { t[1] };	// vector e2 for horizon    
+    double e2[hz] = { t[1] };	// vector e2 for horizon    	
 	double g1[hz] = { t[2] };	// vector g1 for horizon    
 	double g2[hz] = { t[3] };	// vector g2 for horizon    
-	double g3[hz] = { t[4] };	// vector g3 for horizon    	   
+	double g3[hz] = { t[4] };	// vector g3 for horizon	    	   
 	double h = 0;				// h parameter
     
 	for (int j = 1; j < hz; j++){
 	   	e1[j] = e1[j-1] * e1[0] + e2[j-1];
-	   	e2[j] = e1[j-1] * e2[0];		
+	   	e2[j] = e1[j-1] * e2[0];	  		
 		g1[j] = e1[j-1] * g1[0] + g2[j-1];
 		g2[j] = e1[j-1] * g2[0] + g3[j-1];
-		g3[j] = e1[j-1] * g3[0];   						
+		g3[j] = e1[j-1] * g3[0];		 						
 	}
 	for (int j = 0; j < hz; j++){			
 		h += g1[j];			
 	}		
 	u[0] = (y_dk - e1[hz-1] * y[0] - e2[hz-1] * y[1] - g2[hz-1] * u[1] - g3[hz-1] * u[2]) / h;	
-						
-	//Incremental Limit out	
-	if (fabs(yp[0] - sp) < BALANCE){										// Limit incremental in the balance
-		if ((u[0] - u[1]) > LIL_Gain) u[0] = u[1] + LIL_Gain;
-			else if ((u[0] - u[1]) < -LIL_Gain) u[0] = u[1] - LIL_Gain;
-	}else {
-		if ((u[0] - u[1]) > IL_Gain) u[0] = u[1] + IL_Gain;					// Limit incremental off balance
-			else if ((u[0] - u[1]) < -IL_Gain) u[0] = u[1] - IL_Gain;
-	}
-		
+
 	// Upper limit out					
-	if (u[0] > MaxOut) u[0] = MaxOut;
-		else if (u[0] < -MaxOut) u[0] = -MaxOut;
+	if (u[0] > max_out) u[0] = max_out;
+		else if (u[0] < - max_out) u[0] = - max_out;
 	
 	//save_process for K+1	
+	y[3] = y[2];
 	y[2] = y[1];
 	y[1] = y[0];
-		
+	
+	//u[9] = u[8];
+	//u[8] = u[7];
+	//u[7] = u[6];	
 	//u[6] = u[5];
-	//u[5] = u[4];
+	u[5] = u[4];
 	u[4] = u[3];	
 	u[3] = u[2];
 	u[2] = u[1];
@@ -311,16 +328,26 @@ int main(void)
 	int right_motor = 3000;							// Power for motor right
 	int left_motor = 3000;							// Power for motor left
 	int out_balancer = 0;							// Out regulator AP control Motor balancer
-	double yr[3] = {90 ,90, 90};					// Array out incremental y(k), y(k-1), y(k-2), y(k-3)
-	double ur[5] = {0, 0, 0, 0, 0};					// Array process input incremental u(k), u(k-1), u(k-2), u(k-3), u(k-4)
-	double tr[5] = {1.0, -0.3, 0.1, 0.1, 0.1};		// Array parameters adaptive mechanism a1k, a2k, b1k, b2k, b3k	
+	int out_yaw = 0;
+	double yr[4] = {180 ,180, 180, 180};					// Array out incremental y(k), y(k-1), y(k-2), y(k-3)
+	double ur[6] = {0, 0, 0, 0, 0, 0};					// Array process input incremental u(k), u(k-1), u(k-2), u(k-3), u(k-4)
+	double tr[5] = {0.49, 0.49, 0.051, 0.041, 0.011};		// Array parameters adaptive mechanism a1k, a2k, b1k, b2k, b3k	
+	//double tr[5] = {0, 0, 0, 0.0, 0.0};
 	double spr = 0;									// Set point process sp(k)
 	double yrp[2] = {0, 0};									// Array process out yp(k)				
+	
+	double yy[4] = {180 ,180, 180, 180};					// Array out incremental y(k), y(k-1), y(k-2), y(k-3)
+	double uy[6] = {0, 0, 0, 0, 0, 0};					// Array process input incremental u(k), u(k-1), u(k-2), u(k-3), u(k-4)
+	double ty[5] = {1.0, 0.003, 0.02, 0.012, 0.013};		// Array parameters adaptive mechanism a1k, a2k, b1k, b2k, b3k	
+	//double ty[5] = {0, 0, 0, 0, 0};
+	double spy = 0;									// Set point process sp(k)
+	double yyp[2] = {0, 0};									// Array process out yp(k)					
 
 	DDRB = (1 << RM) | (1 << LM);							// Config output/input pins out motors					
 	cli();													// Disable all interrupts
-	//usart_init();											// Initialize serial port			
-	TWI_Master_Initialise();								// Initialize TWI Port		
+	usart_init();											// Initialize serial port			
+	TWI_Master_Initialise();								// Initialize TWI Port
+	_delay_ms(10);		
 	timer2_init();											// Initialize del timer2 for time system 1ms
 	timer1_init();											// Initialize timer 1 for PWM OC1A Right-Motor, OC1B Left-Motor				
 	sei();													// Enable global interrupts	
@@ -331,7 +358,8 @@ int main(void)
 	// Loop
 	while(1)
 	{			
-		if (t_process && t_sample >= T_SAMPLE)				// Samples Read IMU (Accel and Gyro)			
+		//if (t_process && t_sample >= T_SAMPLE)				// Samples Read IMU (Accel and Gyro)			
+		if (t_sample >= T_SAMPLE)
 		{			
 			dt = t_sample;									// Catch sample time for integer angle gyro
 			t_sample = 0;									// Restart sample time			
@@ -355,17 +383,29 @@ int main(void)
 			spr = 0;												// Set point									
 			yrp[0] = a_result[0];										// Process out yk. From -180 -- +180 => 180º * 2^7 = 23040						
 						
-			adaptive(spr, tr, yr, ur, yrp);							// Call adaptive function												
-			out_balancer = ur[0] * GainT;							// Out Controller adaptive			
+			adaptive(spr, tr, yr, ur, yrp, MaxOut_Roll);							// Call adaptive function												
+			out_balancer = ur[0] * GainT_Roll;							// Out Controller adaptive			
 			
-			if (out_balancer > UP) out_balancer = UP;				// Upper limit out
-				else if (out_balancer < -UP) out_balancer = -UP;
+			if (out_balancer > UP_Roll) out_balancer = UP_Roll;				// Upper limit out
+				else if (out_balancer < -UP_Roll) out_balancer = -UP_Roll;
 													
 			//out_balancer = 0;										// Off control
 			
+			//Adaptive predictive Yaw process
+			spy = 0;												// Set point
+			yyp[0] = a_result[2];										// Process out yk. From -180 -- +180 => 180º * 2^7 = 23040
+						
+			adaptive(spy, ty, yy, uy, yyp, MaxOut_Yaw);							// Call adaptive function
+			out_yaw = uy[0] * GainT_Yaw;							// Out Controller adaptive
+						
+			if (out_yaw > UP_Yaw) out_yaw = UP_Yaw;						// Upper limit out
+				else if (out_yaw < -UP_Yaw) out_yaw = -UP_Yaw;
+						
+			//out_yaw = 0;										// Off control
+									
 			// Assign control to motors
-			right_motor = 2900 + out_balancer;	
-			left_motor = 3000 - out_balancer;
+			right_motor = 3000 + out_balancer + out_yaw;	
+			left_motor = 3000 - out_balancer + out_yaw;
 					
 			//Limits PWM motors
 			if (right_motor > 4000) right_motor = 4000;
@@ -374,15 +414,18 @@ int main(void)
 			//Assignments PWMs
 			OCR1A =  right_motor;
 			OCR1B =  left_motor;			
-		
-			//_delay_ms(4);	
-			//put_float(urp[0]);
-			//put_string(" ");
-			//put_float(ur[0]);
-			//put_string(" ");
-			//put_float(out_balancer);
-			//put_float(a_result[0]);				
-			//put_string("\n");												
+			/*			
+			put_float(tr[0]);
+			put_string(" ");
+			put_float(tr[1]);
+			put_string(" ");
+			put_float(tr[2]);
+			put_string(" ");
+			put_float(tr[3]);
+			put_string(" ");
+			put_float(tr[4]);				
+			put_string("\n");												
+			*/
 		}									
 	}	
 }
