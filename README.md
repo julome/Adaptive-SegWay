@@ -1,7 +1,7 @@
 Adaptive-Control-SegWay
 ========================
 
-Adaptive predictive control with Arduino
+Adaptive predictive control with an Atmega168
 
 The objective is the implementation of an adpative predictive control at a low cost as Arduino microcontroller.
 
