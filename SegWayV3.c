@@ -46,7 +46,7 @@
 #define hz 5				// Prediction Horizon
 #define UP_Roll			800.0		// Upper limit out
 #define UP_Yaw			180.0		// Upper limit out
-#define GainT_Roll		15.0		// Total Gain Roll Out Controller
+#define GainT_Roll		25.0		// Total Gain Roll Out Controller
 #define GainT_Yaw		5.0			// Total Gain Yaw Out Controller
 #define MaxOut_Roll		UP_Roll/GainT_Roll
 #define MaxOut_Yaw		UP_Yaw/GainT_Yaw
@@ -168,9 +168,9 @@ long lpf(long pv_sf, long pv_fil_ant, signed char kf){
 }	
 
 //Low Pass Filter (2^4) (kf = 0 - 16 kf_min = 1/16 = 0.0625)
-long lpf_32(long pv_sf, long pv_fil_ant, signed char kf){
+long lpf_16(long pv_sf, long pv_fil_ant, signed char kf){
 	long pv_fil;
-	pv_fil = (kf * pv_sf + (32 - kf) * pv_fil_ant) >> 5;		//pv_fil = kf * pv_sf + (1 - kf) * pv_fil_ant;
+	pv_fil = (kf * pv_sf + (16 - kf) * pv_fil_ant) >> 4;		//pv_fil = kf * pv_sf + (1 - kf) * pv_fil_ant;
 	return pv_fil;
 }
 
@@ -186,7 +186,7 @@ void sample_meters(unsigned char t)
 	TWI_Read(GYRO_XOUT, gyro, 6);		// Gyro meters		
 	//gyro_correct[0] = gyro[1];			// x Axis
 	
-	if (abs(gyro[1]) > 50) gyro_correct[0] = gyro[1];			// Z Axis comprueba la circuiteria sin trampear
+	if (abs(gyro[1]) > 40) gyro_correct[0] = gyro[1];			// Z Axis comprueba la circuiteria sin trampear
 	else gyro_correct[0] = 0;
 	
 	if (abs(gyro[2]) > 100) gyro_correct[2] = gyro[2];			// Z Axis comprueba la circuiteria sin trampear
@@ -211,8 +211,8 @@ void sample_meters(unsigned char t)
 		
 	// Accelerometer
 	TWI_Read(ACCEL_XOUT, accel, 6);			//Accelerometer meters				
-	accel_correct[0] = lpf_32(accel[0], accel_correct[0], 1);		// Low pass filter x axis
-	accel_correct[2] = lpf_32(accel[2], accel_correct[2], 1);		// Low pass filter z axis	
+	accel_correct[0] = lpf_16(accel[0], accel_correct[0], 1);		// Low pass filter x axis
+	accel_correct[2] = lpf_16(accel[2], accel_correct[2], 1);		// Low pass filter z axis	
 }
 
 //Tilt Angles calculator arx adding accelerometer	
