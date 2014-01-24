@@ -3,7 +3,7 @@
  * Robot balancer adaptive
  * Created: 03/06/2013 22:54:55
  * Author: Juan Lopez Medina
- * Mail: julome0@gmail.com
+ * Mail: julome21@gmail.com
  ********************************/ 
 #define F_CPU			16000000UL	// Frequency XTAL 16MHz
 
@@ -35,19 +35,17 @@
 #define SMPRT_DIV		0x19		// Registry Sample Rate Divider
 
 // Configuration 
-#define T_SAMPLE		2			// Time sample Read IMU (Accel and Gyro) T = T_SAMPLE * 1ms
-#define T_RESULT		6			// Time sample result Accel + Gyro T = T_RESULT * T_SAMPLE
-#define T_CONTROL		1			// Time actuation. Must be synchronized with PWM pulse. T = T_CONTROL *  T_RESULT * T_SAMPLE (this must be less than T_PWM - time algorithm adaptive execution)
-#define NL				0.0002		// Noise Level for Adaptive Mechanism.
-#define GainA 			0.4			// Gain for Adaptive Mechanism A
-#define GainB 			0.2			// Gain for Adaptive Mechanism B
+#define T_SAMPLE		14			// Time sample Read IMU (Accel and Gyro) T = T_SAMPLE * 1ms
+#define NL				0.002		// Noise Level for Adaptive Mechanism.
+#define GainA 			0.2			// Gain for Adaptive Mechanism A
+#define GainB 			1.0			// Gain for Adaptive Mechanism B
 #define PmA				1			// Delay Parameters a
 #define PmB				2			// Delay Parameters b
-#define hz 5				// Prediction Horizon
+#define hz				5			// Prediction Horizon
 #define UP_Roll			800.0		// Upper limit out
 #define UP_Yaw			180.0		// Upper limit out
-#define GainT_Roll		25.0		// Total Gain Roll Out Controller
-#define GainT_Yaw		5.0			// Total Gain Yaw Out Controller
+#define GainT_Roll		30.0		// Total Gain Roll Out Controller
+#define GainT_Yaw		15.0			// Total Gain Yaw Out Controller
 #define MaxOut_Roll		UP_Roll/GainT_Roll
 #define MaxOut_Yaw		UP_Yaw/GainT_Yaw
 
@@ -60,15 +58,11 @@
 #define LM PINB2					// Out PWM control Left Motor Timer1 OC1B DPIN 10 Arduino Pro Mini (Atmega328p)
 
 // Variables globales
-volatile unsigned char cont_PWM = 0;
 volatile unsigned char t_sample = 0;		// Count ms for sample timer IMU
-volatile unsigned char t_process = 0;		// Enable actuation in a control period
-volatile unsigned char t_control = 0;		// Time actuation
-volatile unsigned char t_result = 0;		// Time sample result Accel + Gyro (tilt angle result)
 long a_gyro[3] = {0, 0, 0};					// Angles x, y, z result from gyroscope
 long accel_correct[3] = {0, 0, 0};			// Accelerometer components corrected
 double a_result[3] = {0, 0, 0};				// Angles results x, y, z filtered
-
+int offset_gyro[3];							// Offset gyro
 
 // Write byte to IMU through TWI
 void TWI_Write(unsigned char reg, unsigned char data){  // reg= Direction de registro, data= data to write
@@ -138,26 +132,13 @@ void timer1_init(){
 	TCCR1A |= (1 << WGM11);
 	TCCR1B |= (1 << WGM12) | (1 << WGM13);	 	
 	OCR1A = 3000;					// Initialize comparison registry Timer1 PIN A for PWM servo 2000 = 1ms 4000 = 2ms
-	OCR1B = 3000;					// Initialize comparison registry Timer1 PIN B for PWM servo 2000 = 1ms 4000 = 2ms
-	TIMSK1 |= (1 << TOIE1); 		// Enable interrupt timer1 by ICR1 overflow for reset Sample meters	
+	OCR1B = 3000;					// Initialize comparison registry Timer1 PIN B for PWM servo 2000 = 1ms 4000 = 2ms	
 	return;
 }
 
 // Interrupt CTC TIMER2 for system timer in ms
 ISR(TIMER2_COMPA_vect){	
 	t_sample ++;		// Increment count ms			
-}
-
-// Interrupt timer1 by ICR1 overflow for reset Sample meters	
-ISR(TIMER1_OVF_vect){
-	//cont_PWM ++;
-	//if (cont_PWM == 2){
-		//cont_PWM = 0;
-		t_process = 1;		// Enable process
-		//t_sample = 0;		// Reset t_sample No resetear el angulo del giro sera erroneo
-		t_result = 0;		// Reset t_result
-		t_control = 0;		// Reset t_control
-	//}
 }
 
 //Low Pass Filter (2^3) (kf = 0 - 8 kf_min = 1/8 = 0.125)
@@ -174,6 +155,26 @@ long lpf_16(long pv_sf, long pv_fil_ant, signed char kf){
 	return pv_fil;
 }
 
+// Offset Gyro
+void gyro_offset(void){
+	int gyro[3];
+	
+	_delay_ms(1200);	
+	// Begin Read		
+	for (int i = 0; i < 32; i++){
+		TWI_Read(GYRO_XOUT, gyro, 6);		// Gyro meters
+		offset_gyro[0] += gyro[0];
+		offset_gyro[1] += gyro[1];
+		offset_gyro[2] += gyro[2];		
+		_delay_ms(20);
+	}
+	offset_gyro[0] = (offset_gyro[0] >> 5);
+	offset_gyro[1] = (offset_gyro[1] >> 5);
+	offset_gyro[2] = (offset_gyro[2] >> 5);
+	PORTB |= (1 << PB5); 						// Ready Led Pin13 On 
+	_delay_ms(200);								// Delay for ready
+}
+
 //Samples Components from Gyro and accelerometer
 void sample_meters(unsigned char t)
 {
@@ -184,15 +185,8 @@ void sample_meters(unsigned char t)
 	
 	// Gyroscope		
 	TWI_Read(GYRO_XOUT, gyro, 6);		// Gyro meters		
-	//gyro_correct[0] = gyro[1];			// x Axis
-	
-	if (abs(gyro[1]) > 40) gyro_correct[0] = gyro[1];			// Z Axis comprueba la circuiteria sin trampear
-	else gyro_correct[0] = 0;
-	
-	if (abs(gyro[2]) > 100) gyro_correct[2] = gyro[2];			// Z Axis comprueba la circuiteria sin trampear
-	else gyro_correct[2] = 0;
-	
-	//gyro_correct[2] = gyro[2];			// Z Axis
+	gyro_correct[0] = gyro[1] - offset_gyro[1];			// x Axis	
+	gyro_correct[2] = gyro[2] - offset_gyro[2];			// Z Axis
 						
 	/*******************************************************
 	Angle gyro = w * dt
@@ -211,14 +205,14 @@ void sample_meters(unsigned char t)
 		
 	// Accelerometer
 	TWI_Read(ACCEL_XOUT, accel, 6);			//Accelerometer meters				
-	accel_correct[0] = lpf_16(accel[0], accel_correct[0], 1);		// Low pass filter x axis
-	accel_correct[2] = lpf_16(accel[2], accel_correct[2], 1);		// Low pass filter z axis	
+	accel_correct[0] = lpf(accel[0], accel_correct[0], 1);		// Low pass filter x axis
+	accel_correct[2] = lpf(accel[2], accel_correct[2], 1);		// Low pass filter z axis	
 }
 
 //Tilt Angles calculator arx adding accelerometer	
 void angle_result()
 {								
-	double ax = 0;				//Angles result of accelerometer					
+	long ax = 0;				//Angles result of accelerometer					
 					
 	//Angles accelerometer = arctg (x1,x2). Results in radianes (grades = rad * 180/pi) * 2^16 for units as gyro		
 	ax = (atan2(accel_correct[0], accel_correct[2])) * GRADE;		//ax = atan2(x, z) * 180/M_PI	
@@ -232,9 +226,9 @@ void angle_result()
 	a_gyro[0] = a_gyro[0] >> 6;						// Send update in correct units div by 2^6 for next angle meters	   															
 	//a_result[0] = lpf((a_gyro[0] >> 6), a_result[0], 3);				// Result = angle_result/2^16 => angles -180º to 180 	
 
-	a_result[0] = (a_gyro[0] >> 10)/64.0;
+	a_result[0] = (a_gyro[0] >> 9)/128.0;
 	//a_result[2] = lpf((a_gyro[2] >> 6), a_result[2], 5);				// Result = angle_result/2^10 => angles -180º * 2^10 to 180 * 2^10 (YAW)
-	a_result[2] = (a_gyro[2] >> 10)/64.0;
+	a_result[2] = (a_gyro[2] >> 9)/128.0;
 }
 	
 // Adaptive Control
@@ -343,15 +337,16 @@ int main(void)
 	double spy = 0;									// Set point process sp(k)
 	double yyp[2] = {0, 0};									// Array process out yp(k)					
 
-	DDRB = (1 << RM) | (1 << LM);							// Config output/input pins out motors					
+	DDRB = (1 << RM) | (1 << LM) | (1 << PB5);				// Config output/input pins out motors					
 	cli();													// Disable all interrupts
 	usart_init();											// Initialize serial port			
 	TWI_Master_Initialise();								// Initialize TWI Port
 	_delay_ms(10);		
-	timer2_init();											// Initialize del timer2 for time system 1ms
-	timer1_init();											// Initialize timer 1 for PWM OC1A Right-Motor, OC1B Left-Motor				
+	timer2_init();											// Initialize del timer2 for time system 1ms				
 	sei();													// Enable global interrupts	
 	imu_init();												// Initialize IMU MPU-6050		
+	gyro_offset();
+	timer1_init();											// Initialize timer 1 for PWM OC1A Right-Motor, OC1B Left-Motor	
 	GTCCR |= (1 << TSM) | (1 << PSRASY) | (1 << PSRSYNC);	// Stop and reset Timers
 	GTCCR = 0;												// Start Timers synchronized  
 		
@@ -364,20 +359,20 @@ int main(void)
 			dt = t_sample;									// Catch sample time for integer angle gyro
 			t_sample = 0;									// Restart sample time			
 			sample_meters(dt);								// Samples read IMU									
-			t_result++;										// Increment Time sample result
-		}
+			//t_result++;										// Increment Time sample result
+		//}
 			
-		if (t_process && t_result >= T_RESULT)				// Result IMU angles adding accelerometer 	
-		{														
-			t_result = 0;									// Reset Time sample result																				
+		//if (t_process && t_result >= T_RESULT)				// Result IMU angles adding accelerometer 	
+		//{														
+			//t_result = 0;									// Reset Time sample result																				
 			angle_result();									// Result angles meters X,Y,Z 
-			t_control++;									// Increment Time actuation
-		}		
+			//t_control++;									// Increment Time actuation
+		//}		
 				
 		//Control action balancer	
-		if (t_process && t_control >= T_CONTROL){						
-			t_control = 0;
-			t_process = !t_process;							// Reset t_process													
+		//if (t_process && t_control >= T_CONTROL){						
+			//t_control = 0;
+			//t_process = !t_process;							// Reset t_process													
 													
 			//Adaptive predictive balancer process
 			spr = 0;												// Set point									
