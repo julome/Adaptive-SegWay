@@ -2,7 +2,7 @@
  * Segway.c
  * Created: 03/06/2013 22:54:55
 
-	Robot balancer with Adaptive predictive control instead PID
+    Robot balancer with Adaptive predictive control instead PID and Complementary Filter
 			Copyright (C) 2013  Juan Lopez Medina
 
     This program is free software: you can redistribute it and/or modify
