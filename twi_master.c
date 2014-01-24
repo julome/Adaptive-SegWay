@@ -6,7 +6,7 @@
 * Description       : This is a sample driver for the TWI hardware modules.
 *                     It is interrupt driver.
 * Adapted			: Juan Lopez Medina
-* Mail				: juome0@gmail.com
+* Mail				: juiome21@gmail.com
 ****************************************************************************/
 
 #include "avr/io.h"
