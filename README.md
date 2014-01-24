@@ -7,7 +7,8 @@ The objective is the implementation of an adpative predictive control at a low c
 
 This is an example of an adaptive predictive control implemented in a balancing robot using a MPU6050 and an Atmega168 (Arduino Por Mini).
 
-In this project I have used a prediction horizon of 5 control periods, with a delay of one control period, and a control period of 14ms. The gyroscope and accelerometer readings are performed every 2ms filtering only the accelerometer, for later each 6ms accelerometer measures through a complementary type Kalman filter. Finally gets a filtered measure each 12ms moment in which the predictive adaptive function is called. All filters in the MPU6050 have been disabled by enabling a high speed of response.
+
+Firstly, i am using a complementary filter, with a period control of 14ms, for read the balancer angle, secondly i am using an adaptive predictive control with a prediction horizon of 5 control periods, and the model predictive has a delay of one control period.
 
 In this robot is controled roll and yaw position, therefore, it is always in balancing mode and is always in the same direction.
 
