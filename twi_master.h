@@ -1,15 +1,33 @@
-/*****************************************************************************
-* Atmel Corporation
-* File              : twi_master.h
-* AppNote           : AVR315 - TWI Master Implementation
-* Description       : Header file for TWI_Master.c
-* Adapted			: Juan Lopez Medina
-* Mail				: juome0@gmail.com
-****************************************************************************/
+/********************************************************
+ Source code .c file Library for send data through USART AVR	
+    Copyright (C) 2014  Juan Lopez Medina
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along
+    with this program; if not, write to the Free Software Foundation, Inc.,
+    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+* You can contact me by mail : julome21@gmail.com
+*********************************************************/
+
+#ifndef _twi_master_h_
+#define _twi_master_h_
 
 // TWI Status/Control register definitions
 #define TWI_BUFFER_SIZE 8			// Set this to the largest message size that will be sent including address byte.
-#define FCPU			16000000UL	// Frequency XTAL 16MHz
+#ifndef F_CPU 
+#define F_CPU 16000000UL		// Define Clock AVR
+#endif
+
 #define I2C_BAUD		400000UL	// 400KHz. Fast mode
 
 // Global definitions
@@ -74,3 +92,5 @@ unsigned char TWI_Get_Data_From_Transceiver(unsigned char*, unsigned char);
 // TWI Miscellaneous status codes
 #define TWI_NO_STATE               0xF8  // No relevant state information available; TWINT = “0”
 #define TWI_BUS_ERROR              0x00  // Bus error due to an illegal START or STOP condition
+
+#endif
