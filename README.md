@@ -12,6 +12,6 @@ Firstly, I am using a DCM filter for calculate attitude, with a period control o
 
 In this robot is controled roll and yaw position, therefore, it is always in balancing mode and is always in the same direction.
 
-We can see how even the predictive adaptive control adapts to noise getting a satisfactory control of the process. In this video you can see the result: https://www.youtube.com/watch?v=K3qdtP572tM
+We can see how even the predictive adaptive control adapts to noise getting a satisfactory control of the process. In this video you can see the result: http://youtu.be/O7qZxBK4L0k
 
 
