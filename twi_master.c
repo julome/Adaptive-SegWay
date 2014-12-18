@@ -1,17 +1,28 @@
-/*****************************************************************************
-* Atmel Corporation
-* File              : twi_master.c
-* AppNote           : AVR315 - TWI Master Implementation
-*
-* Description       : This is a sample driver for the TWI hardware modules.
-*                     It is interrupt driver.
-* Adapted			: Juan Lopez Medina
-* Mail				: juiome21@gmail.com
-****************************************************************************/
+/********************************************************
+ Source code .c file Library for send data through USART AVR	
+    Copyright (C) 2014  Juan Lopez Medina
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along
+    with this program; if not, write to the Free Software Foundation, Inc.,
+    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+* You can contact me by mail : julome21@gmail.com
+*********************************************************/
 
 #include "avr/io.h"
 #include "avr/interrupt.h"
 #include "twi_master.h"
+
 
 static unsigned int time_out = 0;					// Time out exit Loop
 static unsigned char TWI_buf[ TWI_BUFFER_SIZE ];    // Transceiver buffer
@@ -23,7 +34,7 @@ union TWI_statusReg TWI_statusReg = {0};            // TWI_statusReg is defined 
 // Remember to enable interrupts from the main application after initializing the TWI.
 void TWI_Master_Initialise(void){
 	TWSR &= ~((1 << TWPS1) | (1 << TWPS0));			   // Prescaler TWI to 0
-	TWBR = ((FCPU / I2C_BAUD) - 16) / 2;			   // SCL Frequency
+	TWBR = ((F_CPU / I2C_BAUD) - 16) / 2;			   // SCL Frequency
 	TWDR = 0xFF;                                       // Default content = SDA released.
 	TWCR = (1 << TWEN)|                                // Enable TWI-interface and release TWI pins.
 	(0 << TWIE)|(0 << TWINT)|                          // Disable Interrupt.
